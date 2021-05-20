@@ -15,8 +15,9 @@ library(dplyr)
 
 #set wd according to who is executing the code
 Paths = c("/Users/jonasschmitten/Desktop/FS 2021/Economics in Practice/Clean Data", 
-          "/Users/noahangara/Documents/Master's/8th Semester/Financial Volatility")
-names(Paths) = c("jonasschmitten", "noahangara")
+          "/Users/noahangara/Documents/Master's/8th Semester/Financial Volatility",
+          "C:/Users/magag/Documents/UNIVERSITA/_St.GALLEN - Master in Quant Economics and Finance/Subjects/2^ Semester/Financial volatility/project")
+names(Paths) = c("jonasschmitten", "noahangara", "magag")
 setwd(Paths[Sys.info()[7]])
 
 ### Loading Option and SPX Data
