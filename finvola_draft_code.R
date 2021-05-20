@@ -1,35 +1,40 @@
-# Fin Vola - Draft code (following the lectures to identify the model)
+#Volatility Modeling and NOPE
+#Jonas Schmitten, Moritz Köhler, Giovanni Magagnin, Noah Angara
+#May 2021
 
-
-
-################################################################################
-### SET UP
-
+#Packages
 library(fGarch)
 library(tidyquant)
 library(fBasics)
 library(vars)
 library(tseries)
+library(dplyr)
 
-### Loading data
+
+# Data Prep & Cleaning ----------------------------------------------------
+
+#set wd according to who is executing the code
+Paths = c("/Users/jonasschmitten/Desktop/FS 2021/Economics in Practice/Clean Data", 
+          "/Users/noahangara/Documents/Master's/8th Semester/Financial Volatility")
+names(Paths) = c("jonasschmitten", "noahangara")
+setwd(Paths[Sys.info()[7]])
+
+### Loading Option and SPX Data
 data_option = read.csv("options_data.csv")
-sp500 = getYahooData('^GSPC',start=20190102,end=20201231,freq='daily')
-# alternative way to get the sp500 data
-sp = tq_get('^GSPC', get = "stock.prices", from ='2019-01-01', to = '2020-12-31')
+sp500 = tq_get('^GSPC', get = "stock.prices", from ='2019-01-01', to = '2020-12-31')
 
-### Removing useless columns
-data_spx = subset(sp500, select = -c(High, Low))
-data_option = subset(data_option, select = -c(secid, index_flag, issue_type, issuer, exercise_style))
+### Not interested in High or Low Price
+data_spx = sp500 %>%
+  subset(select = -c(high, low))
+rm(sp500)
 
-### Calculating spx log-returns, calculating net returns first
-spx_net_returns = diff(data_spx$Close)/lag(data_spx$Close)
-spx_log_returns = log(1+spx_net_returns)
-# removing the first row of NA
-spx_log_returns = spx_log_returns[-1,]
+data_option = data_option %>%
+  subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style))
 
-
-################################################################################
-### EXPLORING RETURNS DATA
+### Dataframe with SPX Returns
+spx_returns = data.frame("Returns" = diff(log(data_spx$close)))
+  
+# Exploring Data ----------------------------------------------------------
 
 ### Calculating basic statistics (from fBasics)
 basic_stats = basicStats(spx_log_returns)
@@ -63,14 +68,6 @@ adf.test(spx_log_returns)
 pp.test(spx_log_returns)
 # ok it is stationary
 
-### Idea behind the ARCH / GARCH: we are accounting for the volatility in addition to the mean
-# We have to estimate conditional variance and conditional mean jointly
-# We can use ARMA for the conditional mean (since there's some information flow)
-
-
-################################################################################
-### TRYING WITH ARCH
-
 ### Plotting returns, acf, acf for squared returns, pacf
 plot(spx_log_returns, main = "S&P500 log returns")
 acf(spx_log_returns, main = "S&P500 log returns")
@@ -81,6 +78,14 @@ pacf(spx_log_returns^2, main = "S&P500 squared log returns")
 Box.test(spx_log_returns,lag=30,type="Ljung")
 Box.test(spx_log_returns^2,lag=30,type="Ljung")
 # randomness hypothesis rejected for both the cases
+
+### Idea behind the ARCH / GARCH: we are accounting for the volatility in addition to the mean
+# We have to estimate conditional variance and conditional mean jointly
+# We can use ARMA for the conditional mean (since there's some information flow)
+
+
+# Fitting Volatility Models -----------------------------------------------------
+
 
 ### Fitting the model
 # ARCH(3) - trying this randomly
