@@ -32,7 +32,7 @@ data_option = data_option %>%
   subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style))
 
 ### Dataframe with SPX Returns
-spx_returns = data.frame("Returns" = diff(log(data_spx$close)))
+spx_log_returns = data.frame("Returns" = diff(log(data_spx$close)))
   
 # Exploring Data ----------------------------------------------------------
 
