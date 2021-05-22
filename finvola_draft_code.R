@@ -99,18 +99,21 @@ black_scholes <- function(S, K, y, m, sig, call = TRUE) {
   return(C)
 }
 
-# create new column with the option price per day
-if (data_option$cp_flag == "C"){
-  data_option$BlackScholes <- black_scholes(data$SP500, K_call, risk_free_rate, m, expected_vola)
-} else{
-  data_option$BlackScholes <- black_scholes(data$SP500, K_put, risk_free_rate, m, expected_vola, call = FALSE)
-  }
+
+#define risk-free as 3-month T-Bill
+y = 0.0001
+
+#Apply BS to each row 
+#not working yet
+#stock price has to be exchanged
+#price cannot be negative 
+data_option$BS = ifelse(data_option$cp_flag=='C', black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =T), 
+                        black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =F))
 
 
 
-# store the option prices in global variables for code readability later on
-C_call <- data$call[nrow(data)]
-C_put <- data$put[nrow(data)]
+
+
 
 
 # GREEKS MANUALLY
