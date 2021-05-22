@@ -9,6 +9,8 @@ library(fBasics)
 library(vars)
 library(tseries)
 library(dplyr)
+library(tidyr)
+library(tibble)
 
 
 # Data Prep & Cleaning ----------------------------------------------------
@@ -46,8 +48,12 @@ data_option[c('strike_price', 'best_bid', 'best_offer')] = data_option[c('strike
 data_option = data_option %>% 
   arrange(date, exdate, cp_flag, strike_price)
 
-#Not sure, get rid of NAs? Cannot use this anyways 
-data_option[is.na(data_option)] = 0
+#Check if there is 0 delta
+unique(data_option$delta == 0)
+
+#Remove rows with NA delta 
+data_option = data_option %>% 
+  drop_na(delta)
 
 #Get deltas to 100 and -100 (Saw this on NOPECord)
 data_option$delta = data_option$delta*100
@@ -59,17 +65,83 @@ NOPE =  group_by(data_option, date, cp_flag) %>%
   summarise(NOPE = sum(NO))
 
 NOPE = as.data.frame(rowsum(NOPE$NOPE, as.integer(gl(nrow(NOPE), 2, nrow(NOPE)))))
-NOPE$date = unique(data_option$date)
+NOPE = add_column(NOPE, date = unique(data_option$date), .before = 1)
+
 NOPE$volume = sp500[1:nrow(NOPE),which(colnames(sp500)=="volume")]
 
 NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
-  
+
+
+#Gamma exposure GEX
+data_option$GEX = ifelse(data_option$cp_flag == "C",
+                         data_option$gamma*data_option$open_interest*100,data_option$gamma*data_option$open_interest*-100)
 
 
 
-#data$sumcall = sum(group_by(data_option, date, cp_flag)$NO)
 
-aggregate(data_option$NO, by=list(data_option[c("date", 'cp_flag')]), FUN=sum)
+#Black-Scholes Option Pricing
+#Has to be made dynamic
+
+# inputs
+K_call = 3700
+K_put = 3400
+m = tau/252
+
+# formula (21.3) & (21.4) from lecture notes to calculate option prices
+black_scholes <- function(S, K, y, m, sig, call = TRUE) {
+  d1 <- (log(S/K) + (y + (sig^2)/2) * m) / (sig * sqrt(m))
+  d2 <- d1 - sig * sqrt(m)
+  if (call == TRUE) { # CALL OPTION
+    C <- S * pnorm(d1) - exp(-y*m) * K * pnorm(d2)  
+  } else { # PUT OPTION
+    C <- exp(-y*m) * K * pnorm(-d2) - S * pnorm(-d1)
+  }
+  return(C)
+}
+
+# create new column with the option price per day
+if (data_option$cp_flag == "C"){
+  data_option$BlackScholes <- black_scholes(data$SP500, K_call, risk_free_rate, m, expected_vola)
+} else{
+  data_option$BlackScholes <- black_scholes(data$SP500, K_put, risk_free_rate, m, expected_vola, call = FALSE)
+  }
+
+
+
+# store the option prices in global variables for code readability later on
+C_call <- data$call[nrow(data)]
+C_put <- data$put[nrow(data)]
+
+
+# GREEKS MANUALLY
+d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
+d2_call <- d1_call - expected_vola * sqrt(m)
+
+# DELTA
+delta_call <- pnorm(d1_call)
+# GAMMA
+gamma_call <- dnorm(d1_call) / (s0 * expected_vola * sqrt(m))
+# THETA
+theta_call <- (-(risk_free_rate) * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) - (1/(2*sqrt(m))) * s0 * dnorm(d1_call) * expected_vola) / 365
+# VEGA
+vega_call <- s0 * dnorm(d1_call) * sqrt(m) / 100
+# RHO
+rho_call <- m * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) / 100
+
+# GREEKS WITH PACKAGE
+delta_call
+gamma_call
+theta_call
+vega_call
+rho_call
+
+library(derivmkts)
+greeks(bscall(s = s0, K_call, expected_vola, risk_free_rate, m, 0))
+
+
+
+
+
 
 
 
