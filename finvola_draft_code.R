@@ -14,14 +14,14 @@ library(dplyr)
 # Data Prep & Cleaning ----------------------------------------------------
 
 #set wd according to who is executing the code
-Paths = c("/Users/jonasschmitten/Desktop/FS 2021/Economics in Practice/Clean Data", 
+Paths = c("/Users/jonasschmitten/Downloads/NOPE and Volatility/Data", 
           "/Users/noahangara/Documents/Master's/8th Semester/Financial Volatility",
           "C:/Users/magag/Documents/UNIVERSITA/_St.GALLEN - Master in Quant Economics and Finance/Subjects/2^ Semester/Financial volatility/project")
 names(Paths) = c("jonasschmitten", "noahangara", "magag")
 setwd(Paths[Sys.info()[7]])
 
 ### Loading Option and SPX Data
-data_option = read.csv("options_data.csv")
+data_option = read.csv("options_data.csv", nrows = 1000000)
 sp500 = tq_get('^GSPC', get = "stock.prices", from ='2019-01-01', to = '2020-12-31')
 
 ### Not interested in High or Low Price
@@ -29,28 +29,73 @@ data_spx = sp500 %>%
   subset(select = -c(high, low))
 rm(sp500)
 
-data_option = data_option %>%
-  subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style))
-
 ### Dataframe with SPX Returns
 spx_log_returns = data.frame("Returns" = diff(log(data_spx$close)))
   
+#remove not needed columns 
+data_option = data_option %>%
+  subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style, optionid, contract_size))
+
+#convert date and expiration date to date value
+data_option[c('date', 'exdate')] =  lapply(data_option[c('date', 'exdate')], function(x) as.Date(as.character(x), "%Y%m%d"))
+
+#convert strike price, best bid, bid ask to dollars instead of cents
+data_option[c('strike_price', 'best_bid', 'best_offer')] = data_option[c('strike_price', 'best_bid', 'best_offer')]/1000 
+
+#order data
+data_option = data_option %>% 
+  arrange(date, exdate, cp_flag, strike_price)
+
+#Not sure, get rid of NAs? Cannot use this anyways 
+data_option[is.na(data_option)] = 0
+
+#Get deltas to 100 and -100 (Saw this on NOPECord)
+data_option$delta = data_option$delta*100
+
+#NOPE
+data_option$NO = group_by(data_option, date, cp_flag)$volume * data_option$delta
+
+NOPE =  group_by(data_option, date, cp_flag) %>% 
+  summarise(NOPE = sum(NO))
+
+NOPE = as.data.frame(rowsum(NOPE$NOPE, as.integer(gl(nrow(NOPE), 2, nrow(NOPE)))))
+NOPE$date = unique(data_option$date)
+NOPE$volume = sp500[1:nrow(NOPE),which(colnames(sp500)=="volume")]
+
+NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
+  
+
+
+
+#data$sumcall = sum(group_by(data_option, date, cp_flag)$NO)
+
+aggregate(data_option$NO, by=list(data_option[c("date", 'cp_flag')]), FUN=sum)
+
+
+
+
+
+
+
+
+
+
 # Exploring Data ----------------------------------------------------------
 
 ### Calculating basic statistics (from fBasics)
 basic_stats = basicStats(spx_log_returns)
 
 ### Plotting histogram for the distribution
-hist(spx_log_returns)
+hist(spx_log_returns$Returns,breaks = 200)
 # investigating the kurtosis for the tails
 basic_stats
 # already from here we can say that it is not normal, the kurtosis is too high but let's do the test
 
 ### Jarque-Bera test for normality
 # first, turn log returns into percentages
-percentage_returns=log(spx_log_returns+1)*100 
+#percentage_returns=log(spx_log_returns+1)*100 
 # run the test
-normalTest(percentage_returns, method = "jb")
+normalTest(log(spx_log_returns+1)*100 , method = "jb")
 # reject normality
 
 ### Testing the hypothesis of a white noise
@@ -61,7 +106,7 @@ pacf(spx_log_returns, lag.max = 50, main = "S&P500")
 
 ### Testing for stationarity
 # qualitatively assessing stationarity with the plot of returns
-plot(spx_log_returns)
+plot(y=spx_log_returns$Returns, x = sp500$date[2:nrow(sp500)], ty)
 # Augmented Dickey Fuller Test
 adf.test(spx_log_returns)
 # it seems stationary, but let's run other tests to be sure
