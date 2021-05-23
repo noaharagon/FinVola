@@ -42,6 +42,7 @@ spx_log_returns = spx_log_returns[,-2]
 spx_log_returns$Returns <- apply(spx_log_returns$Returns,2,as.numeric)
 
 #remove not needed columns 
+data_option = fread("options_data.csv", header = T, nrows = 10000)
 data_option = data_option %>%
   subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style, optionid, contract_size))
 
@@ -83,9 +84,13 @@ NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
 data_option$GEX = ifelse(data_option$cp_flag == "C",
                          data_option$gamma*data_option$open_interest*100,data_option$gamma*data_option$open_interest*-100)
 
-
-
-
+#add price of SPX to options (first change date format)
+data_option$date = as.Date(strptime(data_option$date, "%Y%m%d"))
+data_option$exdate = as.Date(strptime(data_option$exdate, "%Y%m%d"))
+data_option = data_option %>%
+  mutate(time_to_exp = as.numeric(data_option$exdate-data_option$date)) %>%
+  mutate(spx_price = lapply(as.numeric(rownames(data_option)), 
+                            function(x) pull(data_spx[which(data_option$date[x] == data_spx$date), "close"])))
 # Pre-Tests SPX Data ------------------------------------------------------
 
 ### Calculating basic statistics (from fBasics)
@@ -125,12 +130,12 @@ adf.test(as.numeric(spx_log_returns))
 
 # rolling forecast for GARCH(1,1) with forecast length of 504 days
 spec_garch = ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
-                         mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), 
-                         distribution.model = "norm")
+                        mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), 
+                        distribution.model = "norm")
 
 mod_garch = ugarchroll(spec_garch, data = spx_log_returns, n.ahead = 1, 
-                 n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
-                 solver = "hybrid", fit.control = list(), keep.coef = TRUE)
+                       n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
+                       solver = "hybrid", fit.control = list(), keep.coef = TRUE)
 
 #BIC and AIC
 -2*mean(mod_garch@model[["loglik"]])+log(504)*4
@@ -142,25 +147,27 @@ spec_gjrgarch = ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder 
                            distribution.model = "std")
 
 mod_gjrgarch = ugarchroll(spec_gjrgarch, data = spx_log_returns, n.ahead = 1, 
-                       n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
-                       solver = "hybrid", fit.control = list(), keep.coef = TRUE)
+                          n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
+                          solver = "hybrid", fit.control = list(), keep.coef = TRUE)
 
 #BIC and AIC
 -2*mean(mod_gjrgarch@model[["loglik"]])+log(504)*4
 -2*mean(mod_gjrgarch@model[["loglik"]])+2*length(mod_gjrgarch@model[["coef"]][[1]])
 
 # rolling forecast for Markov-Switching GARCH with forecast length of 504 days
-n.ots <- 504
-n.its <- 502
+n.ots <- 504 #window size for forecast
+n.its <- nrow(spx_log_returns)-n.ots #number of forecasts we can produce given by sample size - window size
 k.update <- 1
 
 y.ots <- matrix(NA, nrow = n.ots, ncol = 1) #pre-allocate memory
 model.fit <- vector(mode = "list", length = length(models)) #pre-allocate memory
 MS_Vola <- matrix(NA, nrow = n.ots, ncol = 1) ##pre-allocate memory
-ms2.garch.s <- CreateSpec(variance.spec = list(model = "gjrGARCH"),
-                          distribution.spec = list(distribution = "std"),
-                          switch.spec = list(K = 2))
+MS_LogLik <- matrix(NA, nrow = n.ots, ncol = 1) ##pre-allocate memory
+ms2.garch.s <- CreateSpec(variance.spec = list(model = c("sGARCH","gjrGARCH")),
+                          distribution.spec = list(distribution = c("norm", "std")),
+                          switch.spec = list(do.mix = FALSE))
 models <- list(ms2.garch.s)
+
 
 #loop to create rolling forecast
 for (i in 1:n.ots) {
@@ -170,29 +177,25 @@ for (i in 1:n.ots) {
   y.ots[i] <- spx_log_returns[n.its + i]
   for (j in 1:length(models)) {
     if (k.update == 1 || i %% k.update == 1) {
-      #indicate when model is re-estimated
+      #indicate which model is re-estimated
       cat("Model", j, "is reestimated\n")
       #estimate MS-GARCH on data
       model.fit[[j]] <- FitML(spec = models[[j]], data = y.its,
-                                ctr = list(do.se = FALSE))
+                              ctr = list(do.se = FALSE))
     }
     #add conditional vola forecast to list with MS-GARCH model spec
     MS_Vola[i] = predict(model.fit[[j]]$spec, par = model.fit[[j]]$par,
-                           newdata = y.its)
-    }
+                         newdata = y.its)
+    MS_LogLik[i] = model.fit[[j]][["loglik"]]
   }
+}
 
-
-
+#BIC and AIC
+-2*mean(MS_LogLik) + 2*length(model.fit[1][[1]][["par"]])
+-2*mean(MS_LogLik) + log(n.ots)*length(model.fit[1][[1]][["par"]])
 
 
 # Black-Scholes Option Pricing --------------------------------------------
-
-
-# inputs
-K_call = 3700
-K_put = 3400
-m = tau/252
 
 # formula (21.3) & (21.4) from lecture notes to calculate option prices
 black_scholes <- function(S, K, y, m, sig, call = TRUE) {
@@ -208,17 +211,27 @@ black_scholes <- function(S, K, y, m, sig, call = TRUE) {
 
 
 #define risk-free as 3-month T-Bill
-y = 0.0001
+y = 0.0026 
+data_option$risk_free = y*data_option$time_to_exp/365
 
 #Apply BS to each row 
 #not working yet
 #stock price has to be exchanged
 #price cannot be negative 
-data_option$BS = ifelse(data_option$cp_flag=='C', black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =T), 
-                        black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =F))
+data_option = data_option %>%
+  mutate(BS = lapply(as.numeric(rownames(data_option)), 
+                     function(x) black_scholes(
+                       S = as.numeric(data_option$spx_price[x]),
+                       K = data_option$strike_price[x]/1000,
+                       y = y,
+                       m = data_option$time_to_exp[x]/365,
+                       sig = data_option$impl_volatility[x],
+                       call = ifelse(data_option$cp_flag[x] == "C", T, F)
+                     )))
 
-
-
+data_option$acc_price = (data_option$best_offer-data_option$best_bid)/2 + data_option$best_bid
+data_option$diff = as.numeric(data_option$BS) - data_option$acc_price
+plot(y = data_option$diff, x = data_option$time_to_exp)
 # GREEKS MANUALLY
 d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
 d2_call <- d1_call - expected_vola * sqrt(m)
@@ -243,5 +256,9 @@ rho_call
 
 library(derivmkts)
 greeks(bscall(s = s0, K_call, expected_vola, risk_free_rate, m, 0))
-
-
+insignificant = list()
+for (i in 1:502){
+  if (mod_gjrgarch@model[["coef"]][[i]][["coef"]][19]> 0.1){
+    insignificant[i] = i
+  }
+}
