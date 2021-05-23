@@ -304,12 +304,12 @@ mod_gjrgarch = ugarchroll(spec_gjrgarch, data = spx_log_returns, n.ahead = 1,
 # rolling forecast for Markov-Switching GARCH with forecast length of 504 days
 n.ots <- 504
 n.its <- 502
-k.update <- 100
+k.update <- 1
 
 y.ots <- matrix(NA, nrow = n.ots, ncol = 1) #pre-allocate memory
 model.fit <- vector(mode = "list", length = length(models)) #pre-allocate memory
 MS_Vola <- matrix(NA, nrow = n.ots, ncol = 1) ##pre-allocate memory
-ms2.garch.s <- CreateSpec(variance.spec = list(model = "sGARCH"),
+ms2.garch.s <- CreateSpec(variance.spec = list(model = "gjrGARCH"),
                           distribution.spec = list(distribution = "std"),
                           switch.spec = list(K = 2))
 models <- list(ms2.garch.s)
