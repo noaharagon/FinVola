@@ -2,7 +2,7 @@
 #Jonas Schmitten, Moritz Köhler, Giovanni Magagnin, Noah Angara
 #May 2021
 
-#Packages
+# Packages ----------------------------------------------------------------
 library(fGarch)
 library(tidyquant)
 library(fBasics)
@@ -39,8 +39,8 @@ spx_log_returns = spx_log_returns %>%
   mutate(data.frame(sp500[2:nrow(sp500), "date"]))
 spx_log_returns = xts(spx_log_returns, order.by = spx_log_returns$date)
 spx_log_returns = spx_log_returns[,-2]
-rm(sp500)
-  
+spx_log_returns$Returns <- apply(spx_log_returns$Returns,2,as.numeric)
+
 #remove not needed columns 
 data_option = data_option %>%
   subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style, optionid, contract_size))
@@ -86,67 +86,39 @@ data_option$GEX = ifelse(data_option$cp_flag == "C",
 
 
 
-#Black-Scholes Option Pricing
-#Has to be made dynamic
+# Pre-Tests SPX Data ------------------------------------------------------
 
-# inputs
-K_call = 3700
-K_put = 3400
-m = tau/252
+### Calculating basic statistics (from fBasics)
+basic_stats = basicStats(as.numeric(spx_log_returns))
 
-# formula (21.3) & (21.4) from lecture notes to calculate option prices
-black_scholes <- function(S, K, y, m, sig, call = TRUE) {
-  d1 <- (log(S/K) + (y + (sig^2)/2) * m) / (sig * sqrt(m))
-  d2 <- d1 - sig * sqrt(m)
-  if (call == TRUE) { # CALL OPTION
-    C <- S * pnorm(d1) - exp(-y*m) * K * pnorm(d2)  
-  } else { # PUT OPTION
-    C <- exp(-y*m) * K * pnorm(-d2) - S * pnorm(-d1)
-  }
-  return(C)
-}
+### Plotting histogram for the distribution
+hist(as.numeric(spx_log_returns$Returns),breaks = 200, xlab = "", main = "")
+abline(v = mean(as.numeric(spx_log_returns)), col="red", lwd=2)
 
+plot(y = as.numeric(spx_log_returns$Returns), type = 'l', x = sp500[2:nrow(sp500), 'date'], ylab = "SP500 Daily Return", xlab = "")
 
-#define risk-free as 3-month T-Bill
-y = 0.0001
+### Normality 
+normalTest(log(as.numeric(spx_log_returns)+1)*100 , method = "jb")
+#QQ-plots
+qqnorm(as.numeric(spx_log_returns))
+qqline(as.numeric(spx_log_returns), distribution = qnorm, colour = 'r')
 
-#Apply BS to each row 
-#not working yet
-#stock price has to be exchanged
-#price cannot be negative 
-data_option$BS = ifelse(data_option$cp_flag=='C', black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =T), 
-                        black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =F))
+### Correlogram
+acf(as.numeric(spx_log_returns),lag.max = 50,main = "S&P500")
+pacf(as.numeric(spx_log_returns), lag.max = 50, main = "S&P500")
+#Squared returns 
+acf(as.numeric(spx_log_returns)^2,lag.max = 50,main = "S&P500")
+pacf(as.numeric(spx_log_returns)^2, lag.max = 50, main = "S&P500")
 
+### Ljung-Box test for autocorrelation
+Box.test(as.numeric(spx_log_returns),lag=30,type="Ljung")
+Box.test(as.numeric(spx_log_returns)^2,lag=30,type="Ljung")
 
+### Stationarity
+#Augmented-Dickey-Fuller
+adf.test(as.numeric(spx_log_returns))
 
-
-
-
-
-# GREEKS MANUALLY
-d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
-d2_call <- d1_call - expected_vola * sqrt(m)
-
-# DELTA
-delta_call <- pnorm(d1_call)
-# GAMMA
-gamma_call <- dnorm(d1_call) / (s0 * expected_vola * sqrt(m))
-# THETA
-theta_call <- (-(risk_free_rate) * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) - (1/(2*sqrt(m))) * s0 * dnorm(d1_call) * expected_vola) / 365
-# VEGA
-vega_call <- s0 * dnorm(d1_call) * sqrt(m) / 100
-# RHO
-rho_call <- m * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) / 100
-
-# GREEKS WITH PACKAGE
-delta_call
-gamma_call
-theta_call
-vega_call
-rho_call
-
-library(derivmkts)
-greeks(bscall(s = s0, K_call, expected_vola, risk_free_rate, m, 0))
+### Asymmetries and the Leverage Effect
 
 
 # Volatility Forecasts ----------------------------------------------------
@@ -212,5 +184,64 @@ for (i in 1:n.ots) {
 
 
 
+
+
+# Black-Scholes Option Pricing --------------------------------------------
+
+
+# inputs
+K_call = 3700
+K_put = 3400
+m = tau/252
+
+# formula (21.3) & (21.4) from lecture notes to calculate option prices
+black_scholes <- function(S, K, y, m, sig, call = TRUE) {
+  d1 <- (log(S/K) + (y + (sig^2)/2) * m) / (sig * sqrt(m))
+  d2 <- d1 - sig * sqrt(m)
+  if (call == TRUE) { # CALL OPTION
+    C <- S * pnorm(d1) - exp(-y*m) * K * pnorm(d2)  
+  } else { # PUT OPTION
+    C <- exp(-y*m) * K * pnorm(-d2) - S * pnorm(-d1)
+  }
+  return(C)
+}
+
+
+#define risk-free as 3-month T-Bill
+y = 0.0001
+
+#Apply BS to each row 
+#not working yet
+#stock price has to be exchanged
+#price cannot be negative 
+data_option$BS = ifelse(data_option$cp_flag=='C', black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =T), 
+                        black_scholes(3000, data_option$strike_price, y, as.numeric(unlist(data_option['exdate'] - data_option['date']))/252, data_option$impl_volatility, call =F))
+
+
+
+# GREEKS MANUALLY
+d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
+d2_call <- d1_call - expected_vola * sqrt(m)
+
+# DELTA
+delta_call <- pnorm(d1_call)
+# GAMMA
+gamma_call <- dnorm(d1_call) / (s0 * expected_vola * sqrt(m))
+# THETA
+theta_call <- (-(risk_free_rate) * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) - (1/(2*sqrt(m))) * s0 * dnorm(d1_call) * expected_vola) / 365
+# VEGA
+vega_call <- s0 * dnorm(d1_call) * sqrt(m) / 100
+# RHO
+rho_call <- m * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) / 100
+
+# GREEKS WITH PACKAGE
+delta_call
+gamma_call
+theta_call
+vega_call
+rho_call
+
+library(derivmkts)
+greeks(bscall(s = s0, K_call, expected_vola, risk_free_rate, m, 0))
 
 
