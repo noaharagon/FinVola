@@ -11,6 +11,8 @@ library(tseries)
 library(dplyr)
 library(tidyr)
 library(tibble)
+library(rugarch)
+library(MSGARCH)
 
 
 # Data Prep & Cleaning ----------------------------------------------------
@@ -23,16 +25,21 @@ names(Paths) = c("jonasschmitten", "noahangara", "magag")
 setwd(Paths[Sys.info()[7]])
 
 ### Loading Option and SPX Data
-data_option = read.csv("options_data.csv", nrows = 1000000)
-sp500 = tq_get('^GSPC', get = "stock.prices", from ='2019-01-01', to = '2020-12-31')
+#data_option = read.csv("options_data.csv", nrows = 1000000)
+sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-732, to = '2020-12-31')
 
 ### Not interested in High or Low Price
 data_spx = sp500 %>%
   subset(select = -c(high, low))
-rm(sp500)
+
 
 ### Dataframe with SPX Returns
 spx_log_returns = data.frame("Returns" = diff(log(data_spx$close)))
+spx_log_returns = spx_log_returns %>%
+  mutate(data.frame(sp500[2:nrow(sp500), "date"])) %>%
+  xts(spx_log_returns, order.by = spx_log_returns$date)
+spx_log_returns = spx_log_returns[,-2]
+rm(sp500)
   
 #remove not needed columns 
 data_option = data_option %>%
@@ -273,6 +280,55 @@ summary(garch1)
 # predicting
 predict(garch1, 90)
 # for the plots, check the profs code
+
+
+
+# rolling forecast for GARCH(1,1) with forecast length of 504 days
+spec_garch = ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), 
+                         mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), 
+                         distribution.model = "norm")
+
+mod_garch = ugarchroll(spec_garch, data = spx_log_returns, n.ahead = 1, 
+                 n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
+                 solver = "hybrid", fit.control = list(), keep.coef = TRUE)
+
+# rolling forecast for GJR-GARCH with forecast length of 504 days
+spec_gjrgarch = ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder = c(1, 1)), 
+                           mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), 
+                           distribution.model = "std")
+
+mod_gjrgarch = ugarchroll(spec_gjrgarch, data = spx_log_returns, n.ahead = 1, 
+                       n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
+                       solver = "hybrid", fit.control = list(), keep.coef = TRUE)
+
+# rolling forecast for Markov-Switching GARCH with forecast length of 504 days
+n.ots <- 504
+n.its <- 502
+k.update <- 100
+
+y.ots <- matrix(NA, nrow = n.ots, ncol = 1) #pre-allocate memory
+model.fit <- vector(mode = "list", length = length(models)) #pre-allocate memory
+MS_Vola <- matrix(NA, nrow = n.ots, ncol = 1) ##pre-allocate memory
+ms2.garch.s <- CreateSpec(variance.spec = list(model = "sGARCH"),
+                          distribution.spec = list(distribution = "std"),
+                          switch.spec = list(K = 2))
+models <- list(ms2.garch.s)
+
+#loop to create rolling forecast
+for (i in 1:n.ots) {
+  cat("Backtest - Iteration: ", i, "\n")
+  y.its <- as.numeric(spx_log_returns[i:(n.its + i - 1)])
+  y.ots[i] <- spx_log_returns[n.its + i]
+  for (j in 1:length(models)) {
+    if (k.update == 1 || i %% k.update == 1) {
+      cat("Model", j, "is reestimated\n")
+      model.fit[[j]] <- FitML(spec = models[[j]], data = y.its,
+                                ctr = list(do.se = FALSE))
+    }
+    MS_Vola[i] = predict(model.fit[[j]]$spec, par = model.fit[[j]]$par,
+                           newdata = y.its)
+    }
+  }
 
 
 
