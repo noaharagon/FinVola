@@ -316,15 +316,19 @@ models <- list(ms2.garch.s)
 
 #loop to create rolling forecast
 for (i in 1:n.ots) {
+  #indicate which i-step ahead forecast is produced
   cat("Backtest - Iteration: ", i, "\n")
   y.its <- as.numeric(spx_log_returns[i:(n.its + i - 1)])
   y.ots[i] <- spx_log_returns[n.its + i]
   for (j in 1:length(models)) {
     if (k.update == 1 || i %% k.update == 1) {
+      #indicate when model is re-estimated
       cat("Model", j, "is reestimated\n")
+      #estimate MS-GARCH on data
       model.fit[[j]] <- FitML(spec = models[[j]], data = y.its,
                                 ctr = list(do.se = FALSE))
     }
+    #add conditional vola forecast to list with MS-GARCH model spec
     MS_Vola[i] = predict(model.fit[[j]]$spec, par = model.fit[[j]]$par,
                            newdata = y.its)
     }
