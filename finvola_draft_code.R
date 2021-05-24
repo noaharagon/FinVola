@@ -277,7 +277,7 @@ data_option = data_option %>%
                                   K = data_option$strike_price[x],
                                   y = data_option$risk_free[x],
                                   m = data_option$time_to_exp[x]/365,
-                                  sig = data_option[x, paste0(i, "_vola")],
+                                  sig = data_option[x, paste0(i, "_vola")]*sqrt(data_option$time_to_exp[x]),#scale vola over maturity of option
                                   call = ifelse(data_option$cp_flag[x] == "C", T, F)
                                 )))/1000)
 }
