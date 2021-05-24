@@ -15,6 +15,7 @@ library(tibble)
 library(rugarch)
 library(MSGARCH)
 library(data.table)
+library(stargazer)
 
 
 # Data Prep & Cleaning ----------------------------------------------------
@@ -87,8 +88,6 @@ data_option$GEX = ifelse(data_option$cp_flag == "C",
                          data_option$gamma*data_option$open_interest*100,data_option$gamma*data_option$open_interest*-100)
 
 #add price of SPX to options (first change date format)
-data_option$date = as.Date(strptime(data_option$date, "%Y%m%d"))
-data_option$exdate = as.Date(strptime(data_option$exdate, "%Y%m%d"))
 data_option = data_option %>%
   mutate(time_to_exp = as.numeric(data_option$exdate-data_option$date)) %>%
   mutate(spx_price = lapply(as.numeric(rownames(data_option)), 
@@ -97,6 +96,7 @@ data_option = data_option %>%
 
 ### Calculating basic statistics (from fBasics)
 basic_stats = basicStats(as.numeric(spx_log_returns))
+stargazer(t(basic_stats[]))
 
 ### Plotting histogram for the distribution
 hist(as.numeric(spx_log_returns$Returns),breaks = 200, xlab = "", main = "")
@@ -111,11 +111,11 @@ qqnorm(as.numeric(spx_log_returns))
 qqline(as.numeric(spx_log_returns), distribution = qnorm, colour = 'r')
 
 ### Correlogram
-acf(as.numeric(spx_log_returns),lag.max = 50,main = "S&P500")
-pacf(as.numeric(spx_log_returns), lag.max = 50, main = "S&P500")
+acf(as.numeric(spx_log_returns),lag.max = 50,main = "S&P500 Log Returns")
+pacf(as.numeric(spx_log_returns), lag.max = 50, main = "S&P500 Log Returns")
 #Squared returns 
-acf(as.numeric(spx_log_returns)^2,lag.max = 50,main = "S&P500")
-pacf(as.numeric(spx_log_returns)^2, lag.max = 50, main = "S&P500")
+acf(as.numeric(spx_log_returns)^2,lag.max = 50,main = "S&P500 Log Returns Squared")
+pacf(as.numeric(spx_log_returns)^2, lag.max = 50, main = "S&P500 Log Returns Squared")
 
 ### Ljung-Box test for autocorrelation
 Box.test(as.numeric(spx_log_returns),lag=30,type="Ljung")
@@ -230,23 +230,20 @@ black_scholes <- function(S, K, y, m, sig, call = TRUE) {
 
 
 #define risk-free as 3-month T-Bill
-y = 0.0026 
+y = 0.0026 #LIBOR as of 21/05/2021
 data_option$risk_free = y*data_option$time_to_exp/365
 
-#Apply BS to each row 
-#not working yet
-#stock price has to be exchanged
-#price cannot be negative 
+#Apply BS to each row using implied volatility
 data_option = data_option %>%
-  mutate(BS = lapply(as.numeric(rownames(data_option)), 
+  mutate(BS = as.numeric(lapply(as.numeric(rownames(data_option)), 
                      function(x) black_scholes(
                        S = as.numeric(data_option$spx_price[x]),
-                       K = data_option$strike_price[x]/1000,
+                       K = data_option$strike_price[x],
                        y = data_option$risk_free[x],
                        m = data_option$time_to_exp[x]/365,
                        sig = data_option$impl_volatility[x],
                        call = ifelse(data_option$cp_flag[x] == "C", T, F)
-                     )))
+                     )))/1000)
 
 #investigate differences between mid of bid/offer and our computed BS price
 data_option$acc_price = (data_option$best_offer-data_option$best_bid)/2 + data_option$best_bid
@@ -263,24 +260,27 @@ ms_garch_vola = data.frame("ms_garch_vola" = unlist(MS_Vola), #MS Garch doesn't 
 
 #joining vola forecasts into option df
 data_option = data_option %>%
-  mutate(garch_vola = lapply(as.numeric(rownames(data_option)), 
-                             function(x) garch_vola[which(data_option$date[x] == garch_vola$date), "garch_vola"])) %>%
-  mutate(gjr_garch_vola = lapply(as.numeric(rownames(data_option)), 
-                          function(x) gjr_garch_vola[which(data_option$date[x] == gjr_garch_vola$date), "gjr_garch_vola"])) %>%
-  mutate(ms_garch_vola = lapply(as.numeric(rownames(data_option)), 
-                                 function(x) ms_garch_vola[which(data_option$date[x] == ms_garch_vola$date), "ms_garch_vola"]))
-#BS Price with GARCH volatility
-data_option = data_option %>%
-  mutate(BS_Garch = lapply(as.numeric(rownames(data_option)), 
-                     function(x) black_scholes(
-                       S = as.numeric(data_option$spx_price[x]),
-                       K = data_option$strike_price[x]/1000,
-                       y = data_option$risk_free[x],
-                       m = data_option$time_to_exp[x]/365,
-                       sig = as.numeric(data_option$garch_vola[x]),
-                       call = ifelse(data_option$cp_flag[x] == "C", T, F)
-                     )))
+  mutate(garch_vola = as.numeric(lapply(as.numeric(rownames(data_option)), 
+                             function(x) garch_vola[which(data_option$date[x] == garch_vola$date), "garch_vola"]))) %>%
+  mutate(gjr_garch_vola = as.numeric(lapply(as.numeric(rownames(data_option)), 
+                          function(x) gjr_garch_vola[which(data_option$date[x] == gjr_garch_vola$date), "gjr_garch_vola"]))) %>%
+  mutate(ms_garch_vola = as.numeric(lapply(as.numeric(rownames(data_option)), 
+                                 function(x) ms_garch_vola[which(data_option$date[x] == ms_garch_vola$date), "ms_garch_vola"])))
 
+#BS Price with GARCH, GJR-GARCH and MS-GARCH Volatility
+vola_models = c("garch", "gjr_garch", "ms_garch")
+for (i in vola_models) {
+data_option = data_option %>%
+  mutate("BS_{i}" := as.numeric(lapply(as.numeric(rownames(data_option)), 
+                                function(x) black_scholes(
+                                  S = as.numeric(data_option$spx_price[x]),
+                                  K = data_option$strike_price[x],
+                                  y = data_option$risk_free[x],
+                                  m = data_option$time_to_exp[x]/365,
+                                  sig = data_option[x, paste0(i, "_vola")],
+                                  call = ifelse(data_option$cp_flag[x] == "C", T, F)
+                                )))/1000)
+}
 
 # GREEKS MANUALLY
 d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
