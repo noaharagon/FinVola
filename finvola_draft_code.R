@@ -14,6 +14,7 @@ library(tidyr)
 library(tibble)
 library(rugarch)
 library(MSGARCH)
+library(data.table)
 
 
 # Data Prep & Cleaning ----------------------------------------------------
