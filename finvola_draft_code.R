@@ -43,7 +43,7 @@ spx_log_returns = spx_log_returns[,-2]
 spx_log_returns$Returns <- apply(spx_log_returns$Returns,2,as.numeric)
 
 #remove not needed columns 
-data_option = fread("options_data.csv", header = T, nrows = 10000)
+data_option = read.csv("options_data.csv", header = T, nrows = 10000)
 data_option = data_option %>%
   subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style, optionid, contract_size))
 
@@ -239,7 +239,7 @@ data_option = data_option %>%
                      function(x) black_scholes(
                        S = as.numeric(data_option$spx_price[x]),
                        K = data_option$strike_price[x]/1000,
-                       y = y,
+                       y = data_option$risk_free[x],
                        m = data_option$time_to_exp[x]/365,
                        sig = data_option$impl_volatility[x],
                        call = ifelse(data_option$cp_flag[x] == "C", T, F)
@@ -266,6 +266,18 @@ data_option = data_option %>%
                           function(x) gjr_garch_vola[which(data_option$date[x] == gjr_garch_vola$date), "gjr_garch_vola"])) %>%
   mutate(ms_garch_vola = lapply(as.numeric(rownames(data_option)), 
                                  function(x) ms_garch_vola[which(data_option$date[x] == ms_garch_vola$date), "ms_garch_vola"]))
+#BS Price with GARCH volatility
+data_option = data_option %>%
+  mutate(BS_Garch = lapply(as.numeric(rownames(data_option)), 
+                     function(x) black_scholes(
+                       S = as.numeric(data_option$spx_price[x]),
+                       K = data_option$strike_price[x]/1000,
+                       y = data_option$risk_free[x],
+                       m = data_option$time_to_exp[x]/365,
+                       sig = as.numeric(data_option$garch_vola[x]),
+                       call = ifelse(data_option$cp_flag[x] == "C", T, F)
+                     )))
+
 
 # GREEKS MANUALLY
 d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
