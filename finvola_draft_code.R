@@ -137,6 +137,8 @@ mod_garch = ugarchroll(spec_garch, data = spx_log_returns, n.ahead = 1,
                        n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
                        solver = "hybrid", fit.control = list(), keep.coef = TRUE)
 
+fit_garch = ugarchfit(data = spx_log_returns, spec = spec_garch)
+garch_news = newsimpact(z = NULL, fit_garch)
 #BIC and AIC
 -2*mean(mod_garch@model[["loglik"]])+log(504)*4
 -2*mean(mod_garch@model[["loglik"]])+2*length(mod_garch@model[["coef"]][[1]])
@@ -150,9 +152,17 @@ mod_gjrgarch = ugarchroll(spec_gjrgarch, data = spx_log_returns, n.ahead = 1,
                           n.start = 504,  refit.every = 1, window.size= 504, refit.window=c('moving'), 
                           solver = "hybrid", fit.control = list(), keep.coef = TRUE)
 
-#BIC and AIC
+fit_gjrgarch = ugarchfit(data = spx_log_returns, spec = spec_gjrgarch)
+gjrgarch_news = newsimpact(z = NULL, fit_gjrgarch)
+
 -2*mean(mod_gjrgarch@model[["loglik"]])+log(504)*4
 -2*mean(mod_gjrgarch@model[["loglik"]])+2*length(mod_gjrgarch@model[["coef"]][[1]])
+
+#news impact curve
+plot(gjrgarch_news$zx, gjrgarch_news$zy, ylab=gjrgarch_news$yexpr, 
+     xlab=gjrgarch_news$xexpr, type="l", main = "News Impact Curve" ,ylim=c(0,0.01))
+plot(garch_news$zx, garch_news$zy, xlab=garch_news$xexpr, ylab=garch_news$yexpr
+     , type="l", main = "News Impact Curve" ,ylim=c(0,0.01))
 
 # rolling forecast for Markov-Switching GARCH with forecast length of 504 days
 n.ots <- 504 #window size for forecast
