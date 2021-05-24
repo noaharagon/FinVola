@@ -6,6 +6,7 @@
 library(fGarch)
 library(tidyquant)
 library(fBasics)
+library(strucchange)
 library(vars)
 library(tseries)
 library(dplyr)
@@ -125,6 +126,11 @@ adf.test(as.numeric(spx_log_returns))
 
 ### Asymmetries and the Leverage Effect
 
+### Testing for structural breaks
+d = cbind(spx_log_returns, stats::lag(spx_log_returns))
+fs = Fstats(as.numeric(d$Returns) ~ as.numeric(d$Returns.1))
+plot(fs)
+lines(breakpoints(fs))
 
 # Volatility Forecasts ----------------------------------------------------
 
