@@ -28,7 +28,7 @@ setwd(Paths[Sys.info()[7]])
 
 ### Loading Option and SPX Data
 #data_option = read.csv("options_data.csv", nrows = 1000000)
-sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-732, to = '2020-12-31')
+sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-750, to = '2020-12-31')
 
 ### Not interested in High or Low Price
 data_spx = sp500 %>%
@@ -246,9 +246,28 @@ data_option = data_option %>%
                        call = ifelse(data_option$cp_flag[x] == "C", T, F)
                      )))
 
+#investigate differences between mid of bid/offer and our computed BS price
 data_option$acc_price = (data_option$best_offer-data_option$best_bid)/2 + data_option$best_bid
 data_option$diff = as.numeric(data_option$BS) - data_option$acc_price
 plot(y = data_option$diff, x = data_option$time_to_exp)
+
+#create df of vola forecasts to add to options df
+garch_vola = data.frame("garch_vola" = tail(mod_garch@forecast[["density"]][["Sigma"]], 504),
+                        "date" = tail(mod_garch@model[["index"]], 504)) #504 because this is number of days from start date of options df to end
+gjr_garch_vola = data.frame("gjr_garch_vola" = tail(mod_gjrgarch@forecast[["density"]][["Sigma"]], 504),
+                            "date" = tail(mod_gjrgarch@model[["index"]], 504))
+ms_garch_vola = data.frame("ms_garch_vola" = unlist(MS_Vola), #MS Garch doesn't appear to save dates so can't retrieve it directly
+                           "date" = tail(mod_gjrgarch@model[["index"]], 504))
+
+#joining vola forecasts into option df
+data_option = data_option %>%
+  mutate(garch_vola = lapply(as.numeric(rownames(data_option)), 
+                             function(x) garch_vola[which(data_option$date[x] == garch_vola$date), "garch_vola"])) %>%
+  mutate(gjr_garch_vola = lapply(as.numeric(rownames(data_option)), 
+                          function(x) gjr_garch_vola[which(data_option$date[x] == gjr_garch_vola$date), "gjr_garch_vola"])) %>%
+  mutate(ms_garch_vola = lapply(as.numeric(rownames(data_option)), 
+                                 function(x) ms_garch_vola[which(data_option$date[x] == ms_garch_vola$date), "ms_garch_vola"]))
+
 # GREEKS MANUALLY
 d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
 d2_call <- d1_call - expected_vola * sqrt(m)
