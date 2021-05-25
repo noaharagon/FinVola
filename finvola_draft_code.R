@@ -17,15 +17,16 @@ library(MSGARCH)
 library(data.table)
 library(stargazer)
 library(hrbrthemes)
-
+library(here)
 
 # Data Prep & Cleaning ----------------------------------------------------
 
 #set wd according to who is executing the code
 Paths = c("/Users/jonasschmitten/Downloads/NOPE and Volatility/Data", 
           "/Users/noahangara/Documents/Master's/8th Semester/Financial Volatility",
-          "C:/Users/magag/Documents/UNIVERSITA/_St.GALLEN - Master in Quant Economics and Finance/Subjects/2^ Semester/Financial volatility/project")
-names(Paths) = c("jonasschmitten", "noahangara", "magag")
+          "C:/Users/magag/Documents/UNIVERSITA/_St.GALLEN - Master in Quant Economics and Finance/Subjects/2^ Semester/Financial volatility/project",
+          "/Users/MK/Desktop/HSG/master/sem_3/fin_vola")
+names(Paths) = c("jonasschmitten", "noahangara", "magag", "MK")
 setwd(Paths[Sys.info()[7]])
 
 ### Loading Option and SPX Data
