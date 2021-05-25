@@ -327,37 +327,5 @@ for (i in vola_models) {
                                               y = data_option$risk_free[x],
                                               m = data_option$time_to_exp[x]/365,
                                               sig = data_option[x, paste0(i, "_vola")]*sqrt(data_option$time_to_exp[x]))
-                                            )))
-}
-
-
-# GREEKS MANUALLY
-d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
-d2_call <- d1_call - expected_vola * sqrt(m)
-
-# DELTA
-delta_call <- pnorm(d1_call)
-# GAMMA
-gamma_call <- dnorm(d1_call) / (s0 * expected_vola * sqrt(m))
-# THETA
-theta_call <- (-(risk_free_rate) * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) - (1/(2*sqrt(m))) * s0 * dnorm(d1_call) * expected_vola) / 365
-# VEGA
-vega_call <- s0 * dnorm(d1_call) * sqrt(m) / 100
-# RHO
-rho_call <- m * K_call * exp(-risk_free_rate * m) * pnorm(d2_call) / 100
-
-# GREEKS WITH PACKAGE
-delta_call
-gamma_call
-theta_call
-vega_call
-rho_call
-
-library(derivmkts)
-greeks(bscall(s = s0, K_call, expected_vola, risk_free_rate, m, 0))
-insignificant = list()
-for (i in 1:502){
-  if (mod_gjrgarch@model[["coef"]][[i]][["coef"]][19]> 0.1){
-    insignificant[i] = i
-  }
+                                            ))/10)
 }
