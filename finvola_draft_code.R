@@ -83,10 +83,30 @@ NOPE$volume = sp500[1:nrow(NOPE),which(colnames(sp500)=="volume")]
 
 NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
 
-
 #Gamma exposure GEX
-data_option$GEX = ifelse(data_option$cp_flag == "C",
-                         data_option$gamma*data_option$open_interest*100,data_option$gamma*data_option$open_interest*-100)
+get_gex = function(yourdata){
+  df = yourdata
+  dates = unique(df$date)
+  gammas = c()
+  gammas_xday = c()
+  for (i in dates) {
+    sub_df = df %>% 
+      filter(date == i)
+    gamma_i = ifelse(sub_df$cp_flag == "C",
+                     sub_df$gamma*sub_df$open_interest*100,
+                     sub_df$gamma*sub_df$open_interest*-100)
+    gammas = c(gammas, gamma_i)
+    gammas_xday = c(gammas_xday, sum(gamma_i))
+  }
+  df$GEX = gammas
+  df_gammas = data.frame(dates, gammas_xday)
+  names(df_gammas) = c("date", "GEX")
+  return(list(df, df_gammas))
+}
+
+
+data_option = get_gex(data_option)[[1]]
+gex_xday = get_gex(data_option)[[2]]
 
 #add price of SPX to options (first change date format)
 data_option = data_option %>%
