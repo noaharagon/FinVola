@@ -28,7 +28,7 @@ names(Paths) = c("jonasschmitten", "noahangara", "magag")
 setwd(Paths[Sys.info()[7]])
 
 ### Loading Option and SPX Data
-#data_option = read.csv("options_data.csv", nrows = 1000000)
+data_option = read.csv("options_data.csv", nrows = 100000)
 sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-750, to = '2020-12-31')
 
 ### Not interested in High or Low Price
@@ -45,7 +45,6 @@ spx_log_returns = spx_log_returns[,-2]
 spx_log_returns$Returns <- apply(spx_log_returns$Returns,2,as.numeric)
 
 #remove not needed columns 
-data_option = read.csv("options_data.csv", header = T, nrows = 10000)
 data_option = data_option %>%
   subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style, optionid, contract_size))
 
