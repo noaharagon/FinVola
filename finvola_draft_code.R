@@ -329,3 +329,34 @@ for (i in vola_models) {
                                               sig = data_option[x, paste0(i, "_vola")]*sqrt(data_option$time_to_exp[x]))
                                             ))/10)
 }
+
+#join option delta with implied vola into option df
+data_option = data_option %>%
+    mutate("delta_implied_vola" = as.numeric(lapply(as.numeric(rownames(data_option)), 
+                                            function(x) delta_fct(
+                                              S = as.numeric(data_option$spx_price[x]),
+                                              K = data_option$strike_price[x],
+                                              y = data_option$risk_free[x],
+                                              m = data_option$time_to_exp[x]/365,
+                                              sig = data_option[x, "impl_volatility"],#scale vola over maturity of option
+                                              call = ifelse(data_option$cp_flag[x] == "C", T, F)
+                                            )))*100)
+
+
+#join option gamma with implied vola into option df
+data_option = data_option %>%
+    mutate("gamma_implied_vola" = as.numeric(lapply(as.numeric(rownames(data_option)), 
+                                            function(x) gamma_fct(
+                                              S = as.numeric(data_option$spx_price[x]),
+                                              K = data_option$strike_price[x],
+                                              y = data_option$risk_free[x],
+                                              m = data_option$time_to_exp[x]/365,
+                                              sig = data_option[x, "impl_volatility"])))/10)
+
+#for visual analysis
+plot(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "delta_ms_garch"], col = "red")
+
+plot(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "delta_implied_vola"])
+
