@@ -16,6 +16,7 @@ library(rugarch)
 library(MSGARCH)
 library(data.table)
 library(stargazer)
+library(hrbrthemes)
 
 
 # Data Prep & Cleaning ----------------------------------------------------
@@ -65,8 +66,9 @@ unique(data_option$delta == 0)
 data_option = data_option %>% 
   drop_na(delta)
 
-#Get deltas to 100 and -100 (Saw this on NOPECord)
+#Get deltas ang gammas to 100 and -100 (Saw this on NOPECord)
 data_option$delta = data_option$delta*100
+data_option$gamma = data_option$gamma*100
 
 #NOPE
 data_option$NO = group_by(data_option, date, cp_flag)$volume * data_option$delta
@@ -217,6 +219,28 @@ for (i in 1:n.ots) {
 
 
 # Black-Scholes Option Pricing --------------------------------------------
+# plot delta and gamma vs strike price
+plot_df = data_option[which(data_option$cp_flag == "C" & data_option$date == "2019-01-02" &
+                           data_option$exdate == "2020-01-17"), c("gamma", "delta", "strike_price")]
+plot_df$gamma = plot_df$gamma*1000
+plot_df = melt(plot_df, "strike_price")
+greeks_plot = ggplot(data = plot_df)+
+  geom_smooth(aes(y = value, x = strike_price, color = variable), se = F) + 
+  geom_vline(xintercept = as.numeric(data_spx[data_spx$date == "2019-01-02", "close"]), linetype = "dashed", color = "red") + 
+  scale_colour_manual(values = c(gamma = "#69b3a2" , delta = rgb(0.2, 0.6, 0.9, 1)))+
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Option Delta",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis( trans=~./1000, name="Option Gamma")
+  ) + labs(x = "Strike Price", color = "") + theme_ipsum() + theme(legend.position="bottom", 
+                                                                   axis.title.x = element_text(hjust=0.5), axis.title.y.left = element_text(hjust=0.5, color = rgb(0.2, 0.6, 0.9, 1)),
+                                                                   axis.title.y.right = element_text(hjust=0.5, color = "#69b3a2"), legend.box.margin=margin(-15,0, 0, 0),
+                                                                   axis.text.y.right = element_text(color = "#69b3a2"), axis.text.y.left = element_text(color = rgb(0.2, 0.6, 0.9, 1)))
+ggsave(greeks_plot, file="greeks_plot.png", width = 14, height = 10, units = "cm")
+
 
 # formula (21.3) & (21.4) from lecture notes to calculate option prices
 black_scholes <- function(S, K, y, m, sig, call = TRUE) {
