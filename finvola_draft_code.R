@@ -96,7 +96,10 @@ data_option = data_option %>%
 
 ### Calculating basic statistics (from fBasics)
 basic_stats = basicStats(as.numeric(spx_log_returns))
-stargazer(t(basic_stats[]))
+basic_stats = basic_stats %>%
+  slice(-c(5:6, 9:12))
+stargazer(t(basic_stats[1:5,]))
+stargazer(t(basic_stats[6:10,]))
 
 ### Plotting histogram for the distribution
 hist(as.numeric(spx_log_returns$Returns),breaks = 200, xlab = "", main = "")
@@ -281,6 +284,52 @@ data_option = data_option %>%
                                   call = ifelse(data_option$cp_flag[x] == "C", T, F)
                                 )))/1000)
 }
+
+#Calculate Option Greeks with forecasted B&S Prices
+delta_fct <- function(S, K, y, m, sig, call = T){
+  d_1 <- (log(S/K) + (y + (sig^2)/2) * m) / (sig * sqrt(m))
+  if (call == T){#Call Option
+    option_delta <- pnorm(d_1)
+  }
+  else {#Put Option
+    option_delta <- (pnorm(d_1)-1)
+  }
+  return(option_delta)
+}
+
+#function to compute option gamma (doesn't matter if put or call)
+gamma_fct <- function(S, K, y, m, sig){
+  d_1 <- (log(S/K) + (y + (sig^2)/2) * m) / (sig * sqrt(m))
+  option_gamma <- dnorm(d_1)/(S*sig*sqrt(m))#density not cdf
+}
+
+#join option delta into option df
+for (i in vola_models) {
+  data_option = data_option %>%
+    mutate("delta_{i}" := as.numeric(lapply(as.numeric(rownames(data_option)), 
+                                         function(x) delta_fct(
+                                           S = as.numeric(data_option$spx_price[x]),
+                                           K = data_option$strike_price[x],
+                                           y = data_option$risk_free[x],
+                                           m = data_option$time_to_exp[x]/365,
+                                           sig = data_option[x, paste0(i, "_vola")]*sqrt(data_option$time_to_exp[x]),#scale vola over maturity of option
+                                           call = ifelse(data_option$cp_flag[x] == "C", T, F)
+                                         )))*100)
+}
+
+#join option gamma into option df
+for (i in vola_models) {
+  data_option = data_option %>%
+    mutate("gamma_{i}" := as.numeric(lapply(as.numeric(rownames(data_option)), 
+                                            function(x) gamma_fct(
+                                              S = as.numeric(data_option$spx_price[x]),
+                                              K = data_option$strike_price[x],
+                                              y = data_option$risk_free[x],
+                                              m = data_option$time_to_exp[x]/365,
+                                              sig = data_option[x, paste0(i, "_vola")]*sqrt(data_option$time_to_exp[x]))
+                                            )))
+}
+
 
 # GREEKS MANUALLY
 d1_call <- (log(s0/K_call) + (risk_free_rate + (expected_vola^2)/2) * m) / (expected_vola * sqrt(m))
