@@ -354,9 +354,9 @@ data_option = data_option %>%
                                               sig = data_option[x, "impl_volatility"])))/10)
 
 #for visual analysis
-plot(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "strike_price"], 
-     y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "delta_ms_garch"], col = "red")
+plot(x = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "delta_ms_garch"], col = "red")
 
-plot(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "strike_price"], 
-     y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C"), "delta_implied_vola"])
+plot(x = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "delta_implied_vola"])
 
