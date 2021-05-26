@@ -12,14 +12,16 @@ library(tseries)
 library(dplyr)
 library(tidyr)
 library(tibble)
-# library(rugarch)
+library(rugarch)
 library(MSGARCH)
 library(data.table)
 library(stargazer)
 library(hrbrthemes)
 library(here)
 
-# Data Prep & Cleaning ----------------------------------------------------
+# ----------------------------------------------------------------- #
+### Data Prep & Cleaning 
+# ----------------------------------------------------------------- #
 
 #set wd according to who is executing the code
 Paths = c("/Users/jonasschmitten/Downloads/NOPE and Volatility/Data", 
@@ -29,23 +31,12 @@ Paths = c("/Users/jonasschmitten/Downloads/NOPE and Volatility/Data",
 names(Paths) = c("jonasschmitten", "noahangara", "magag", "MK")
 setwd(Paths[Sys.info()[7]])
 
+
 ### Loading Option and SPX Data
+# ----------------------------------------------------
 data_option = read.csv("options_data.csv", nrows = 100000)
-sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-750, to = '2020-12-31')
 
-### Not interested in High or Low Price
-data_spx = sp500 %>%
-  subset(select = -c(high, low))
-
-
-### Dataframe with SPX Returns
-spx_log_returns = data.frame("Returns" = diff(log(data_spx$close)))
-spx_log_returns = spx_log_returns %>%
-  mutate(data.frame(sp500[2:nrow(sp500), "date"]))
-spx_log_returns = xts(spx_log_returns, order.by = spx_log_returns$date)
-spx_log_returns = spx_log_returns[,-2]
-spx_log_returns$Returns <- apply(spx_log_returns$Returns,2,as.numeric)
-
+## CLEANING OPTIONS
 #remove not needed columns 
 data_option = data_option %>%
   subset(select = -c(secid, index_flag, issue_type, issuer, exercise_style, optionid, contract_size))
@@ -71,20 +62,112 @@ data_option = data_option %>%
 data_option$delta = data_option$delta*100
 data_option$gamma = data_option$gamma*100
 
-#NOPE
-get_nope <- function(yourdata, look_up_data) {
-  df <- yourdata
-  df$NO <- df$volume * df$delta
-  df_NOPE <- group_by(df, date) %>% 
+
+### LOADING SP500
+# ----------------------------------------------------
+sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-750, to = '2020-12-31')
+sp500 <- sp500 %>% subset(select = -c(high, low))
+# add log-returns (close-to-close)
+sp500$log_returns <- c(NA,diff(log(sp500$close)))
+
+# log-returns data frame
+spx_log_returns <- data.frame("Returns" = sp500$log_returns[-1])
+rownames(spx_log_returns) <- sp500$date[-1]
+
+### add price of SPX to options (first change date format)
+# ----------------------------------------------------
+data_option <- data_option %>%
+  mutate(time_to_exp = as.numeric(data_option$exdate-data_option$date)) %>%
+  mutate(spx_price = lapply(as.numeric(rownames(data_option)),
+                            function(x) sp500$close[which(data_option$date[x] == sp500$date)]))
+
+
+
+### NOPE & GEX
+# ----------------------------------------------------
+
+## NOPE
+get_nope <- function(opt_data, underl_data) {
+  # required hedging position per contract
+  opt_data$NO <- opt_data$volume * opt_data$delta
+  
+  # caclulate the NOPE per day
+  df_NOPE <- group_by(opt_data, date) %>% 
     summarise(nope_vol = sum(NO))
-  df_NOPE$volume <- look_up_data$volume[which(look_up_data$date %in% df_NOPE$date)]
+  df_NOPE$volume <- underl_data$volume[which(underl_data$date %in% df_NOPE$date)]
   df_NOPE$NOPE <- 100 * (df_NOPE$nope_vol/df_NOPE$volume)
   
-  return(list(df, df_NOPE))
+  # returns the options data frame with new NOPE column
+  # and a data frame with the date and corresponding NOPE
+  return(list(opt_data, df_NOPE[, -which(names(df_NOPE) %in% c("nope_vol", "volume"))]))
 }
 
-data_option <- get_nope(data_option, sp500)[[1]]
-NOPE <- get_nope(data_option, sp500)[[2]]
+
+## GEX
+get_gex <- function(opt_data){
+  # pull the unique dates from the option data
+  dates <- unique(opt_data$date)
+  gammas <- c()
+  gex_xday <- c()
+  for (i in dates) {
+    sub_df <- opt_data %>% 
+      filter(date == i)
+    gamma_i <- ifelse(sub_df$cp_flag == "C",
+                     sub_df$gamma*sub_df$open_interest*100,
+                     sub_df$gamma*sub_df$open_interest*-100)
+    gammas <- c(gammas, gamma_i)
+    gex_xday <- c(gex_xday, sum(gamma_i))
+  }
+  
+  opt_data$GEX <- gammas
+  
+  # returns the options data frame with new GEX column
+  # and a vector with the calculated gammas per day
+  return(list(opt_data, gex_xday))
+}
+
+
+## NOPE + GEX + CLOSE-CLOSE-RETURNS
+NOPE_GEX_Rt <- function(opt_data, underl_data){
+  
+  # NOPE
+  opt_df <- get_nope(opt_data, underl_data)[[1]]
+  nope_gex_df <- get_nope(opt_data, underl_data)[[2]]
+  
+  # GEX
+  opt_df <- get_gex(opt_df)[[1]]
+  nope_gex_df$GEX <- get_gex(opt_df)[[2]]
+  
+  # CLOSE-CLOSE
+  nope_gex_df$close_close <- underl_data$log_returns[which(underl_data$date %in% nope_gex_df$date)+1]
+  
+  # return the new option data and NOPE_GEX
+  return(list(opt_df, nope_gex_df))
+}
+
+data_option <- NOPE_GEX_Rt(data_option, sp500)[[1]]
+sum_nope_gex <- NOPE_GEX_Rt(data_option, sp500)[[2]]
+
+
+
+# ----------------------------------------------------------------- #
+# GRAVEYARD START
+# ----------------------------------------------------------------- #
+
+### Not interested in High or Low Price
+# data_spx = sp500 %>%
+#   subset(select = -c(high, low))
+# 
+# 
+# ### Dataframe with SPX Returns
+# spx_log_returns = data.frame("Returns" = c(0,diff(log(sp500$close))))
+# spx_log_returns = spx_log_returns %>%
+#   mutate(data.frame(sp500[2:nrow(sp500), "date"]))
+# spx_log_returns = xts(spx_log_returns, order.by = spx_log_returns$date)
+# spx_log_returns = spx_log_returns[,-2]
+# spx_log_returns$Returns <- apply(spx_log_returns$Returns,2,as.numeric)
+
+
 
 # # OLD NOPE
 # data_option$NO = group_by(data_option, date, cp_flag)$volume * data_option$delta
@@ -99,44 +182,20 @@ NOPE <- get_nope(data_option, sp500)[[2]]
 # 
 # NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
 
-
-#Gamma exposure GEX
-get_gex <- function(yourdata){
-  df <- yourdata
-  dates <- unique(df$date)
-  gammas <- c()
-  gammas_xday <- c()
-  for (i in dates) {
-    sub_df <- df %>% 
-      filter(date == i)
-    gamma_i <- ifelse(sub_df$cp_flag == "C",
-                     sub_df$gamma*sub_df$open_interest*100,
-                     sub_df$gamma*sub_df$open_interest*-100)
-    gammas <- c(gammas, gamma_i)
-    gammas_xday <- c(gammas_xday, sum(gamma_i))
-  }
-  
-  df$GEX <- gammas
-  
-  df_gammas <- data.frame(dates, gammas_xday)
-  names(df_gammas) <- c("date", "GEX")
-  
-  return(list(df, df_gammas))
-}
+# ----------------------------------------------------------------- #
+# GRAVEYARD END
+# ----------------------------------------------------------------- #
 
 
-data_option = get_gex(data_option)[[1]]
-gex_xday = get_gex(data_option)[[2]]
 
-#add price of SPX to options (first change date format)
-data_option = data_option %>%
-  mutate(time_to_exp = as.numeric(data_option$exdate-data_option$date)) %>%
-  mutate(spx_price = lapply(as.numeric(rownames(data_option)), 
-                            function(x) pull(data_spx[which(data_option$date[x] == data_spx$date), "close"])))
-# Pre-Tests SPX Data ------------------------------------------------------
+
+
+# ----------------------------------------------------------------- #
+# Pre-Tests SPX Data
+# ----------------------------------------------------------------- #
 
 ### Calculating basic statistics (from fBasics)
-basic_stats = basicStats(as.numeric(spx_log_returns))
+basic_stats = basicStats(as.numeric(spx_log_returns$Returns))
 basic_stats = basic_stats %>%
   slice(-c(5:6, 9:12))
 stargazer(t(basic_stats[1:5,]))
