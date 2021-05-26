@@ -282,13 +282,13 @@ n.its <- nrow(spx_log_returns)-n.ots #number of forecasts we can produce given b
 k.update <- 1
 
 y.ots <- matrix(NA, nrow = n.ots, ncol = 1) #pre-allocate memory
-model.fit <- vector(mode = "list", length = length(models)) #pre-allocate memory
 MS_Vola <- matrix(NA, nrow = n.ots, ncol = 1) ##pre-allocate memory
 MS_LogLik <- matrix(NA, nrow = n.ots, ncol = 1) ##pre-allocate memory
 ms2.garch.s <- CreateSpec(variance.spec = list(model = c("sGARCH","gjrGARCH")),
                           distribution.spec = list(distribution = c("norm", "std")),
                           switch.spec = list(do.mix = FALSE))
 models <- list(ms2.garch.s)
+model.fit <- vector(mode = "list", length = length(models)) #pre-allocate memory
 
 
 #loop to create rolling forecast
@@ -475,10 +475,62 @@ data_option = data_option %>%
                                               m = data_option$time_to_exp[x]/365,
                                               sig = data_option[x, "impl_volatility"])))/10)
 
-#for visual analysis
-plot(x = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "strike_price"], 
-     y = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "delta_ms_garch"], col = "red")
+#plotting delta with implied volatility
+plot(x = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "delta_implied_vola"], col = "red", type = "l", lwd = 2, ylab = "Delta", xlab = "")
+lines(x = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+      y = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "delta_implied_vola"], col = "blue", type = "l", lwd = 2)
+lines(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"],
+      y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "delta_implied_vola"], col = "black", type = "l", lwd = 2)
+abline(v = data_spx[data_spx$date == "2019-01-02", "close"], col = "green")
+legend(3200, 80, legend=c("2019-01-18", "2019-03-29", "2020-01-17", "SPX Close"),
+       col=c("red", "blue", "black", "green"), lty=1, cex=0.8, lwd = 2)
 
-plot(x = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "strike_price"], 
-     y = data_option[which(data_option$exdate == "2019-01-04" & data_option$cp_flag == "C"), "delta_implied_vola"])
+#plotting delta with MS-GARCH volatility
+plot(x = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "delta_ms_garch"], col = "red", type = "l", lwd = 2, ylab = "Delta", xlab = "")
+lines(x = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+      y = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "delta_ms_garch"], col = "blue", type = "l", lwd = 2)
+lines(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"],
+      y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "delta_ms_garch"], col = "black", type = "l", lwd = 2)
+abline(v = data_spx[data_spx$date == "2019-01-02", "close"], col = "green")
+legend(3200, 80, legend=c("2019-01-18", "2019-03-29", "2020-01-17", "SPX Close"),
+       col=c("red", "blue", "black", "green"), lty=1, cex=0.8, lwd = 2)
+
+#plotting gamma with implied volatility
+plot(x = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "gamma_implied_vola"], col = "red", type = "l", lwd = 2, ylab = "Gamma", xlab = "")
+lines(x = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+      y = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "gamma_implied_vola"], col = "blue", type = "l", lwd = 2)
+lines(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"],
+      y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "gamma_implied_vola"], col = "black", type = "l", lwd = 2)
+abline(v = data_spx[data_spx$date == "2019-01-02", "close"], col = "green")
+legend(3400, 0.0002, legend=c("2019-01-18", "2019-03-29", "2020-01-17", "SPX Close"),
+       col=c("red", "blue", "black", "green"), lty=1, cex=0.8, lwd = 2)
+
+#plotting gamma with MS-GARCH volatility
+plot(x = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "gamma_ms_garch"], col = "red", type = "l", lwd = 2, ylab = "Gamma", xlab = "")
+lines(x = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+      y = data_option[which(data_option$exdate == "2019-03-29" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "gamma_ms_garch"], col = "blue", type = "l", lwd = 2)
+lines(x = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"],
+      y = data_option[which(data_option$exdate == "2020-01-17" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "gamma_ms_garch"], col = "black", type = "l", lwd = 2)
+abline(v = data_spx[data_spx$date == "2019-01-02", "close"], col = "green")
+legend(3400, 0.001, legend=c("2019-01-18", "2019-03-29", "2020-01-17", "SPX Close"),
+       col=c("red", "blue", "black", "green"), lty=1, cex=0.8, lwd = 2)
+
+plot(x = data_option[which(data_option$exdate == "2019-01-14" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+     y = data_option[which(data_option$exdate == "2019-01-14" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "impl_volatility"], col = "red", type = "l", lwd = 2, ylab = "Implied Volatility", xlab = "")
+lines(x = data_option[which(data_option$exdate == "2019-02-08" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"], 
+      y = data_option[which(data_option$exdate == "2019-02-08" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "impl_volatility"], col = "blue", type = "l", lwd = 2)
+lines(x = data_option[which(data_option$exdate == "2019-06-21" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"],
+      y = data_option[which(data_option$exdate == "2019-06-21" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "impl_volatility"], col = "black", type = "l", lwd = 2)
+legend("topleft", legend=c("2019-01-14", "2019-02-08", "2019-06-21"),
+       col=c("red", "blue", "black"), lty=1, cex=0.8, lwd = 2)
+
+#plot MS forecasts vs Realized
+plot(y = unlist(MS_Vola), x = tail(index(spx_log_returns), 504), type = "l", col = "black", ylab = "Volatility", xlab = "", lwd = 2)
+plot(y = unlist(MS_Vola)-tail(unlist(list(rollapplyr(spx_log_returns, 2, sd, na.rm = T))), 504), x = tail(index(spx_log_returns), 504),
+     ylab = "Est. Difference to Realized Volatility", xlab = "", type ="l", col = "black", lwd = 2)
+
 
