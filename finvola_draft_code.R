@@ -12,7 +12,7 @@ library(tseries)
 library(dplyr)
 library(tidyr)
 library(tibble)
-library(rugarch)
+# library(rugarch)
 library(MSGARCH)
 library(data.table)
 library(stargazer)
@@ -72,36 +72,55 @@ data_option$delta = data_option$delta*100
 data_option$gamma = data_option$gamma*100
 
 #NOPE
-data_option$NO = group_by(data_option, date, cp_flag)$volume * data_option$delta
+get_nope <- function(yourdata, look_up_data) {
+  df <- yourdata
+  df$NO <- df$volume * df$delta
+  df_NOPE <- group_by(df, date) %>% 
+    summarise(nope_vol = sum(NO))
+  df_NOPE$volume <- look_up_data$volume[which(look_up_data$date %in% df_NOPE$date)]
+  df_NOPE$NOPE <- 100 * (df_NOPE$nope_vol/df_NOPE$volume)
+  
+  return(list(df, df_NOPE))
+}
 
-NOPE =  group_by(data_option, date, cp_flag) %>% 
-  summarise(NOPE = sum(NO))
+data_option <- get_nope(data_option, sp500)[[1]]
+NOPE <- get_nope(data_option, sp500)[[2]]
 
-NOPE = as.data.frame(rowsum(NOPE$NOPE, as.integer(gl(nrow(NOPE), 2, nrow(NOPE)))))
-NOPE = add_column(NOPE, date = unique(data_option$date), .before = 1)
+# # OLD NOPE
+# data_option$NO = group_by(data_option, date, cp_flag)$volume * data_option$delta
+# 
+# NOPE =  group_by(data_option, date, cp_flag) %>% 
+#   summarise(NOPE = sum(NO))
+# 
+# NOPE = as.data.frame(rowsum(NOPE$NOPE, as.integer(gl(nrow(NOPE), 2, nrow(NOPE)))))
+# NOPE = add_column(NOPE, date = unique(data_option$date), .before = 1)
+# 
+# NOPE$volume = sp500[which(sp500$date %in% dates),which(colnames(sp500)=="volume")]
+# 
+# NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
 
-NOPE$volume = sp500[1:nrow(NOPE),which(colnames(sp500)=="volume")]
-
-NOPE$NOPE = (NOPE$V1/NOPE$volume)*100
 
 #Gamma exposure GEX
-get_gex = function(yourdata){
-  df = yourdata
-  dates = unique(df$date)
-  gammas = c()
-  gammas_xday = c()
+get_gex <- function(yourdata){
+  df <- yourdata
+  dates <- unique(df$date)
+  gammas <- c()
+  gammas_xday <- c()
   for (i in dates) {
-    sub_df = df %>% 
+    sub_df <- df %>% 
       filter(date == i)
-    gamma_i = ifelse(sub_df$cp_flag == "C",
+    gamma_i <- ifelse(sub_df$cp_flag == "C",
                      sub_df$gamma*sub_df$open_interest*100,
                      sub_df$gamma*sub_df$open_interest*-100)
-    gammas = c(gammas, gamma_i)
-    gammas_xday = c(gammas_xday, sum(gamma_i))
+    gammas <- c(gammas, gamma_i)
+    gammas_xday <- c(gammas_xday, sum(gamma_i))
   }
-  df$GEX = gammas
-  df_gammas = data.frame(dates, gammas_xday)
-  names(df_gammas) = c("date", "GEX")
+  
+  df$GEX <- gammas
+  
+  df_gammas <- data.frame(dates, gammas_xday)
+  names(df_gammas) <- c("date", "GEX")
+  
   return(list(df, df_gammas))
 }
 
