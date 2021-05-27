@@ -70,7 +70,7 @@ names(data_option)[which(names(data_option)=="gamma")] <- "gamma_given"
 
 ### LOADING SP500
 # ----------------------------------------------------
-sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-750, to = '2021-01-01')
+sp500 = tq_get('^GSPC', get = "stock.prices", from = as.Date('2019-01-01')-750, to = '2021-01-05')
 sp500 <- sp500 %>% subset(select = -c(high, low))
 # add log-returns (close-to-close)
 sp500$log_returns <- c(NA,diff(log(sp500$close)))
@@ -240,7 +240,7 @@ msGARCH <- list(ms2_garch_s)[[1]]
 # loop to create rolling forecast
 for (i in 1:n_ots) {
   # indicate which i-step ahead forecast is produced 
-  cat("Backtest - Iteration:", i, "/505 \n")
+  cat("Backtest - Iteration:", i, "/ 505 \n")
   y_its <- as.numeric(spx_log_returns[i:(n_its + i - 1)])
   y_ots <- c(y_ots, spx_log_returns[n_its + i])
   
@@ -266,9 +266,8 @@ print(models_error)
 
 vola_forecasts = data.frame("date" = tail(mod_sGARCH@model[["index"]], 505), #504 because this is number of days from start date of options df to end
                             "garch_vola" = tail(mod_sGARCH@forecast[["density"]][["Sigma"]], 505),
-                            "gjr_garch_vola" = tail(mod_gjrGARCH@forecast[["density"]][["Sigma"]], 505)
-                            , "ms_garch_vola" = as.numeric(unlist(MS_Vola))
-                            )
+                            "gjr_garch_vola" = tail(mod_gjrGARCH@forecast[["density"]][["Sigma"]], 505),
+                            "ms_garch_vola" = as.numeric(unlist(MS_Vola)))
 
 # ----------------------------------------------------------------- #
 # Black-Scholes Option Pricing
@@ -397,13 +396,12 @@ for (i in vola_models) {
   data_option[paste0("BS_", i)] <- NA
   
   # fill the empty column only for the right dates
-  data_option[[paste0("BS_", i)]] <- black_scholes(
-                                                        S = as.numeric(data_option$spx_price),
-                                                        K = data_option$strike_price, 
-                                                        y = data_option$risk_free, 
-                                                        m = data_option$time_to_exp/365,
-                                                        sig = data_option[[paste0("vola_", i)]] * sqrt(data_option$time_to_exp), # scale volatility over maturity of option
-                                                        call = ifelse(data_option$cp_flag == "C", T, F)) / 1000
+  data_option[[paste0("BS_", i)]] <- black_scholes(S = as.numeric(data_option$spx_price),
+                                                   K = data_option$strike_price, 
+                                                   y = data_option$risk_free, 
+                                                   m = data_option$time_to_exp/365,
+                                                   sig = data_option[[paste0("vola_", i)]] * sqrt(data_option$time_to_exp), # scale volatility over maturity of option
+                                                   call = ifelse(data_option$cp_flag == "C", T, F)) / 1000
   }
 
 
@@ -446,7 +444,7 @@ data_option$delta_impl_vola <- delta_fct(S = as.numeric(data_option$spx_price),
 # ----------------------------------------------------
 
 # TIME: 4 sec
-# gammas with GARCH, GJR-GARCH and MS-GARCH Volatility (MISSING!!!!!!!!!!!)
+# gammas with GARCH, GJR-GARCH and MS-GARCH Volatility
 for (i in vola_models) {
   # create empty column
   data_option[paste0("gamma_", i)] <- NA
@@ -524,25 +522,63 @@ get_nope_gex <- function(opt_data, underl_data) {
 data_option <- get_nope_gex(data_option, sp500)[[1]]
 NOPE_GEX_Rt <- get_nope_gex(data_option, sp500)[[2]]
 
+### CORRELATION & REGRESSION
+# ----------------------------------------------------
+corr_nope <- data.frame(cor(NOPE_GEX_Rt[3:13], use="complete.obs"))[11,1:5]
+names(corr_nope) <- c("SqueezeMetrics", "GARCH", "gjrGARCJ", "msGARCH", "ImpliedVolatility")
+rownames(corr_nope) <- c("1-Day Close-Close")
 
-# plot NOPE -> close-close
-plot(NOPE_GEX_Rt$NOPE_given, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$NOPE_sGARCH, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$NOPE_gjrGARCH, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$NOPE_msGARCH, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$NOPE_impl, NOPE_GEX_Rt$close_close)
+corr_gex <- data.frame(cor(NOPE_GEX_Rt[3:13], use="complete.obs"))[11,6:10]
+names(corr_gex) <- c("SqueezeMetrics", "GARCH", "gjrGARCJ", "msGARCH", "ImpliedVolatility")
+rownames(corr_gex) <- c("1-Day Close-Close")
 
-# plot GEX -> close-close
-plot(NOPE_GEX_Rt$GEX_given, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$GEX_sGARCH, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$GEX_gjrGARCH, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$GEX_msGARCH, NOPE_GEX_Rt$close_close)
-plot(NOPE_GEX_Rt$GEX_impl, NOPE_GEX_Rt$close_close)
+# stargazer
+stargazer(corr_nope,  summary = FALSE)
+stargazer(corr_gex,  summary = FALSE)
 
+# regressions
+# separate
+summary(lm(close_close ~ GEX_given + GEX_impl + GEX_msGARCH + GEX_sGARCH + GEX_gjrGARCH, data=NOPE_GEX_Rt))
+summary(lm(close_close ~ NOPE_impl+ NOPE_given + NOPE_sGARCH + NOPE_gjrGARCH + NOPE_msGARCH, data=NOPE_GEX_Rt))
+
+# mixed
+summary(lm(close_close ~ NOPE_impl + GEX_impl, data=NOPE_GEX_Rt))
+summary(lm(close_close ~ NOPE_sGARCH + GEX_sGARCH, data=NOPE_GEX_Rt))
+summary(lm(close_close ~ NOPE_msGARCH + GEX_msGARCH, data=NOPE_GEX_Rt))
+summary(lm(close_close ~ NOPE_gjrGARCH + GEX_gjrGARCH, data=NOPE_GEX_Rt))
 
 # ----------------------------------------------------------------- #
 # PLOTS
 # ----------------------------------------------------------------- #
+
+### NOPE & GEX
+# ----------------------------------------------------
+# ggplot function
+custom_scatter <- function(yourdata, model){
+  ggplot(data = yourdata) + geom_point(aes(x = !!as.name(model), y=close_close), size = 0.5) +
+    labs(x = unlist(str_split(model, "_"))[1], y = "1-Day Close-Close Log-Return", color = "") + 
+    theme_bw() + theme(panel.grid = element_blank()) + 
+    geom_vline(xintercept = 0, color = "red", size = 0.1)
+}
+
+# NOPE
+custom_scatter(NOPE_GEX_Rt, "NOPE_given")
+custom_scatter(NOPE_GEX_Rt, "NOPE_sGARCH")
+custom_scatter(NOPE_GEX_Rt, "NOPE_gjrGARCH")
+ggsave(custom_scatter(NOPE_GEX_Rt, "NOPE_msGARCH"), file="NOPE_msGARCH.png", width = 14, height = 10, units = "cm")
+ggsave(custom_scatter(NOPE_GEX_Rt, "NOPE_impl"), file="NOPE_implied.png", width = 14, height = 10, units = "cm")
+
+# GEX
+custom_scatter(NOPE_GEX_Rt, "GEX_given")
+custom_scatter(NOPE_GEX_Rt, "GEX_sGARCH")
+custom_scatter(NOPE_GEX_Rt, "GEX_gjrGARCH")
+ggsave(custom_scatter(NOPE_GEX_Rt, "GEX_msGARCH"), file="GEX_msGARCH.png", width = 14, height = 10, units = "cm")
+ggsave(custom_scatter(NOPE_GEX_Rt, "GEX_impl"), file="GEX_implied.png", width = 14, height = 10, units = "cm")
+
+
+### GREEKS
+# ----------------------------------------------------
+
 summary(data_option$delta_impl_vola)
 #plotting delta with implied volatility
 plot(x = data_option[which(data_option$exdate == "2019-01-18" & data_option$cp_flag == "C" & data_option$date == "2019-01-02"), "strike_price"],
