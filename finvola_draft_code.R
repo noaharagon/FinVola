@@ -277,11 +277,12 @@ vola_forecasts = data.frame("date" = tail(mod_sGARCH@model[["index"]], 505), #50
 plot_df = data_option[which(data_option$cp_flag == "C" & data_option$date == "2019-01-02" &
                               data_option$exdate == "2020-01-17"), c("gamma_given", "delta_given", "strike_price")]
 plot_df$gamma_given = plot_df$gamma_given*1000
-plot_df = melt(plot_df, "strike_price")
+colnames(plot_df) = c("gamma", "delta", "strike")
+plot_df = melt(plot_df, "strike")
 greeks_plot = ggplot(data = plot_df)+
-  geom_smooth(aes(y = value, x = strike_price, color = variable), se = F) +
+  geom_smooth(aes(y = value, x = strike, color = variable), se = F) +
   geom_vline(xintercept = as.numeric(sp500[sp500$date == "2019-01-02", "close"]), linetype = "dashed", color = "red") +
-  scale_colour_manual(values = c(gamma_given = "#69b3a2" , delta_given = rgb(0.2, 0.6, 0.9, 1)))+
+  scale_colour_manual(values = c(gamma = "red" , delta = "black"))+
   scale_y_continuous(
     
     # Features of the first axis
@@ -289,10 +290,10 @@ greeks_plot = ggplot(data = plot_df)+
     
     # Add a second axis and specify its features
     sec.axis = sec_axis( trans=~./1000, name="Option Gamma")
-  ) + labs(x = "Strike Price", color = "") + theme_ipsum() + theme(legend.position="bottom",
-                                                                   axis.title.x = element_text(hjust=0.5), axis.title.y.left = element_text(hjust=0.5, color = rgb(0.2, 0.6, 0.9, 1)),
-                                                                   axis.title.y.right = element_text(hjust=0.5, color = "#69b3a2"), legend.box.margin=margin(-15,0, 0, 0),
-                                                                   axis.text.y.right = element_text(color = "#69b3a2"), axis.text.y.left = element_text(color = rgb(0.2, 0.6, 0.9, 1)))
+  ) + labs(x = "Strike Price", color = "") + theme_ipsum() + theme(legend.position= c(0.8, 0.8),
+                                                                   axis.title.x = element_text(hjust=0.5), axis.title.y.left = element_text(hjust=0.5),
+                                                                   axis.title.y.right = element_text(hjust=0.5), legend.box.margin=margin(-15,0, 0, 0),
+                                                                   axis.text.y.right = element_text(), axis.text.y.left = element_text())
 
 ggsave(greeks_plot, file="greeks_plot.png", width = 14, height = 10, units = "cm")
 
