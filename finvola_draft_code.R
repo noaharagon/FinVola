@@ -248,7 +248,6 @@ models_error$markov <- c(-2 * mean(MS_LogLik) + 2 * length(model_fit$par),
 # stargazer errors
 rownames(models_error) <- models_error$error
 models_error <- models_error[-1]
-models_error
 stargazer(models_error, summary = FALSE, align = TRUE, no.space = TRUE, column.labels = c("GARCH", "GJR GARCH", "MS GARCH"))
 
 
