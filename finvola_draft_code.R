@@ -290,7 +290,7 @@ greeks_plot = ggplot(data = plot_df)+
     
     # Add a second axis and specify its features
     sec.axis = sec_axis( trans=~./1000, name="Option Gamma")
-  ) + labs(x = "Strike Price", color = "") + theme_ipsum() + theme(legend.position= c(0.8, 0.8),
+  ) + labs(x = "Strike Price", color = "") + theme_bw() + theme(panel.grid = element_blank(), legend.position= c(0.8, 0.8),
                                                                    axis.title.x = element_text(hjust=0.5), axis.title.y.left = element_text(hjust=0.5),
                                                                    axis.title.y.right = element_text(hjust=0.5), legend.box.margin=margin(-15,0, 0, 0),
                                                                    axis.text.y.right = element_text(), axis.text.y.left = element_text())
